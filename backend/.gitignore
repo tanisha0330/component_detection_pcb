@@ -1,0 +1,8 @@
+venv/
+__pycache__/
+*.pt
+storage/samples/*
+!storage/samples/.gitkeep
+*.db
+*.sqlite3
+.env
