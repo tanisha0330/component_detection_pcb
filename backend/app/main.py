@@ -5,6 +5,8 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 import os
 import json
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from . import models, schemas, database, ml_pipeline
 
@@ -19,6 +21,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    try:
+        body = await request.body()
+        print("--- 422 ERROR DEBUG ---")
+        print(f"RAW BODY: {body}")
+        print(f"ERRORS: {exc.errors()}")
+        print("-----------------------")
+    except:
+        pass
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
 os.makedirs("storage", exist_ok=True)
 os.makedirs("storage/samples", exist_ok=True)
