@@ -197,7 +197,7 @@ class _PrototypeEditorScreenState extends State<PrototypeEditorScreen> {
         }
         stream.removeListener(listener);
       },
-      onError: (_, __) {
+      onError: (_, _) {
         if (!completer.isCompleted) completer.complete(const Size(1000, 1000));
         stream.removeListener(listener);
       },
@@ -532,7 +532,7 @@ class _PrototypeEditorScreenState extends State<PrototypeEditorScreen> {
           Text('PCB Annotation Workspace',
               style: TextStyle(
                   fontSize: 11,
-                  color: Colors.white.withOpacity(0.4),
+                  color: Colors.white.withValues(alpha: 0.4),
                   letterSpacing: 0.5)),
         ],
       ),
@@ -594,7 +594,7 @@ class _PrototypeEditorScreenState extends State<PrototypeEditorScreen> {
             const SizedBox(height: 8),
             Text('Load a PCB image to start annotating',
                 style: TextStyle(
-                    color: Colors.white.withOpacity(0.35), fontSize: 13)),
+                    color: Colors.white.withValues(alpha: 0.35), fontSize: 13)),
             const SizedBox(height: 24),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
@@ -654,7 +654,7 @@ class _PrototypeEditorScreenState extends State<PrototypeEditorScreen> {
               color: accent,
               shape: BoxShape.circle,
               boxShadow: [
-                BoxShadow(color: accent.withOpacity(0.55), blurRadius: 5)
+                BoxShadow(color: accent.withValues(alpha: 0.55), blurRadius: 5)
               ],
             ),
           ),
@@ -662,7 +662,7 @@ class _PrototypeEditorScreenState extends State<PrototypeEditorScreen> {
           Text(statusText,
               style: TextStyle(
                   fontSize: 12,
-                  color: Colors.white.withOpacity(0.65),
+                  color: Colors.white.withValues(alpha: 0.65),
                   letterSpacing: 0.1)),
           const Spacer(),
           Container(
@@ -800,7 +800,7 @@ class _PrototypeEditorScreenState extends State<PrototypeEditorScreen> {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         itemCount: kAvailableLabels.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        separatorBuilder: (_, _) => const SizedBox(width: 6),
         itemBuilder: (context, index) {
           final label = kAvailableLabels[index];
           final isSelected = _selectedLabel == label;
@@ -830,7 +830,7 @@ class _PrototypeEditorScreenState extends State<PrototypeEditorScreen> {
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? chipColor.withOpacity(0.20)
+                    ? chipColor.withValues(alpha: 0.20)
                     : const Color(0xFF21262D),
                 border: Border.all(
                   color: isSelected ? chipColor : const Color(0xFF30363D),
@@ -927,9 +927,9 @@ class _PrototypeEditorScreenState extends State<PrototypeEditorScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.10),
+          color: color.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(7),
-          border: Border.all(color: color.withOpacity(0.28), width: 1),
+          border: Border.all(color: color.withValues(alpha: 0.28), width: 1),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1081,13 +1081,13 @@ class CanvasBBoxPainter extends CustomPainter {
       // Faint fill
       canvas.drawRect(rect,
           Paint()
-            ..color = color.withOpacity(sel ? 0.13 : 0.05)
+            ..color = color.withValues(alpha: sel ? 0.13 : 0.05)
             ..style = PaintingStyle.fill);
 
       // Border — 1.2 px (1.8 when selected)
       canvas.drawRect(rect,
           strokePaint
-            ..color = sel ? color : color.withOpacity(0.7)
+            ..color = sel ? color : color.withValues(alpha: 0.7)
             ..strokeWidth = sel ? 1.8 : 1.2);
 
       // Label tag
@@ -1098,7 +1098,7 @@ class CanvasBBoxPainter extends CustomPainter {
             color: Colors.white,
             fontSize: 9.5,
             fontWeight: FontWeight.w700,
-            background: Paint()..color = color.withOpacity(0.80),
+            background: Paint()..color = color.withValues(alpha: 0.80),
           ),
         ),
         textDirection: TextDirection.ltr,
@@ -1122,11 +1122,11 @@ class CanvasBBoxPainter extends CustomPainter {
           _toScreen(dragStartNorm!, size), _toScreen(dragCurrentNorm!, size));
       canvas.drawRect(r,
           Paint()
-            ..color = color.withOpacity(0.07)
+            ..color = color.withValues(alpha: 0.07)
             ..style = PaintingStyle.fill);
       canvas.drawRect(r,
           Paint()
-            ..color = color.withOpacity(0.65)
+            ..color = color.withValues(alpha: 0.65)
             ..style = PaintingStyle.stroke
             ..strokeWidth = 1.2);
     }

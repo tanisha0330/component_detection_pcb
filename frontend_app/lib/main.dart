@@ -223,7 +223,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           for (var p in allProjects) {
             labelSet.add(p.label);
           }
-          final List<String> availableFilters = ['All', ...labelSet.toList()];
+          final List<String> availableFilters = ['All', ...labelSet];
 
           final displayedProjects = allProjects.where((p) {
             if (_selectedFilter == 'All') return true;
