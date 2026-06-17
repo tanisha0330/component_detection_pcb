@@ -213,7 +213,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           } else if (snapshot.hasError) {
-            return Center(child: Text('Error: \${snapshot.error}'));
+            return Center(child: Text('Error: ${snapshot.error}'));
           } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return const Center(child: Text('No projects found. Create one!'));
           }
@@ -262,7 +262,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: ListTile(
                         title: Text(project.name),
-                        subtitle: Text('Created: \${project.createdAt.substring(0, 10)}\nStatus: \${project.label}'),
+                        subtitle: Text('Created: ${project.createdAt.substring(0, 10)}\nStatus: ${project.label}'),
                         trailing: const Icon(Icons.arrow_forward_ios),
                         onLongPress: () => _showLabelDialog(project),
                         onTap: () {
