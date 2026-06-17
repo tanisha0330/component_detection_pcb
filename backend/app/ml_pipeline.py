@@ -416,6 +416,13 @@ async def run_inference(
         # Clear any stale predictor state from previous runs
         vp_model.predictor = None
 
+        # This prevents the 80 vs 81 channel mismatch during VPE extraction
+        print("  Step 0: Resizing model architecture to match prompt classes...")
+        vp_model.set_classes(unique_labels, vp_model.get_text_pe(unique_labels))
+
+        # Step 1: Encode visual prompt embeddings from the PROTOTYPE image
+        print("  Step 1: Encoding VPE from prototype...")
+
         # Step 1: Encode visual prompt embeddings from the PROTOTYPE image
         print("  Step 1: Encoding VPE from prototype...")
         vp_model.predict(

@@ -108,7 +108,7 @@ class _InferenceScreenState extends State<InferenceScreen> {
                       child: ListTile(
                         leading: const Icon(Icons.image),
                         title: Text('Run #${sample.id}'),
-                        subtitle: Text('Detections: ${sample.detections.length}\\nTime: ${sample.timestamp.toLocal().toString().substring(0, 16)}'),
+                        subtitle: Text('Detections: ${sample.detections.length}\nTime: ${sample.timestamp.toLocal().toString().substring(0, 16)}'),
                         trailing: const Icon(Icons.arrow_forward_ios),
                         onTap: () {
                           Navigator.push(
