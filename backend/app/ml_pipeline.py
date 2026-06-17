@@ -1,4 +1,5 @@
 import os
+import uuid
 import gc
 import json
 import cv2
@@ -287,7 +288,9 @@ async def run_inference(
     print(f"  Source: database ({len(raw_box_dicts)} boxes)")
 
     # ── Save uploaded target image ────────────────────────────
-    target_path = os.path.join("storage/samples", f"raw_{project_id}_{file.filename}")
+    run_id = uuid.uuid4().hex[:8]
+    unique_filename = f"{run_id}_{file.filename}"
+    target_path = os.path.join("storage/samples", f"raw_{project_id}_{unique_filename}")
     print(f"Step: Saving uploaded target image to {target_path}...")
     with open(target_path, "wb") as buffer:
         buffer.write(await file.read())
@@ -595,12 +598,12 @@ async def run_inference(
                 labels=final_labels_text,
             )
 
-        result_filename = f"result_{project_id}_{file.filename}"
+        result_filename = f"result_{project_id}_{unique_filename}"
         out_path = os.path.join("storage/samples", result_filename)
         cv2.imwrite(out_path, cv2.cvtColor(annotated_image, cv2.COLOR_RGB2BGR))
         print(f"  Saved → {out_path}")
 
-        raw_aligned_filename = f"aligned_raw_{project_id}_{file.filename}"
+        raw_aligned_filename = f"aligned_raw_{project_id}_{unique_filename}"
         raw_aligned_path = os.path.join("storage/samples", raw_aligned_filename)
         aligned_target_pil.save(raw_aligned_path)
 
