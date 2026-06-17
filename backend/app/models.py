@@ -35,6 +35,7 @@ class Sample(Base):
     project_id = Column(Integer, ForeignKey("projects.id"))
     original_path = Column(String)
     annotated_path = Column(String, nullable=True)
+    results_data = Column(String, nullable=True) # JSON string of detections
     status = Column(String, default="pending") # pending, completed, failed
     timestamp = Column(DateTime, default=datetime.utcnow)
 

@@ -1,26 +1,53 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'models/project.dart';
 import 'services/api_service.dart';
 import 'screens/project_hub_screen.dart';
+import 'screens/login.dart';
+import 'screens/admin_dashboard.dart';
 
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  bool isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+  String role = prefs.getString('role') ?? 'user';
+  
+  Widget initialScreen = const LoginScreen();
+  if (isLoggedIn) {
+    if (role == 'admin') {
+      initialScreen = const AdminDashboardScreen();
+    } else {
+      initialScreen = const DashboardScreen();
+    }
+  }
 
-void main() {
-  runApp(const VisualPromptApp());
+  runApp(VisualPromptApp(initialScreen: initialScreen));
 }
 
 class VisualPromptApp extends StatelessWidget {
-  const VisualPromptApp({super.key});
+  final Widget initialScreen;
+  const VisualPromptApp({super.key, required this.initialScreen});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Visual Prompt AI',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
+        scaffoldBackgroundColor: const Color(0xFFE1D4C2),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF6E473B),
+          primary: const Color(0xFF291C0E),
+          secondary: const Color(0xFF6E473B),
+          surface: const Color(0xFFE1D4C2),
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF291C0E),
+          foregroundColor: Colors.white,
+        ),
         useMaterial3: true,
       ),
-      home: const DashboardScreen(),
+      home: initialScreen,
     );
   }
 }
@@ -88,6 +115,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(
         title: const Text('My Projects'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+            onPressed: () async {
+              SharedPreferences prefs = await SharedPreferences.getInstance();
+              await prefs.clear();
+              if (!context.mounted) return;
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (context) => const LoginScreen()),
+                (Route<dynamic> route) => false,
+              );
+            },
+          ),
+        ],
       ),
       body: FutureBuilder<List<Project>>(
         future: _projectsFuture,

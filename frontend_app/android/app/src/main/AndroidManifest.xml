@@ -4,6 +4,11 @@
         android:label="frontend_app"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+
+        <meta-data
+            android:name="io.flutter.app.android.EnableImpeller"
+            android:value="false" />
+            
         <activity
             android:name=".MainActivity"
             android:exported="true"

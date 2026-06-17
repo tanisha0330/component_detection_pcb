@@ -1,9 +1,10 @@
-// lib/screens/inference_screen.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/project.dart';
+import '../models/sample.dart';
 import '../services/api_service.dart';
+import 'sample_detail_screen.dart';
 
 class InferenceScreen extends StatefulWidget {
   final Project project;
@@ -14,41 +15,50 @@ class InferenceScreen extends StatefulWidget {
 }
 
 class _InferenceScreenState extends State<InferenceScreen> {
-  File? _selectedImage;
-  String? _annotatedImageUrl;
   bool _isProcessing = false;
+  late Future<List<Sample>> _samplesFuture;
   
   final ImagePicker _picker = ImagePicker();
   final ApiService _apiService = ApiService();
 
-  // Method to open the camera
-  Future<void> _captureImage() async {
-    final XFile? photo = await _picker.pickImage(source: ImageSource.camera);
-    // If you prefer gallery testing, change to: ImageSource.gallery
+  final Color darkBrown = const Color(0xFF291C0E);
+  final Color greenAccent = const Color(0xFF6E473B);
 
-    if (photo != null) {
-      setState(() {
-        _selectedImage = File(photo.path);
-        _annotatedImageUrl = null; // Clear previous results
-      });
-    }
+  @override
+  void initState() {
+    super.initState();
+    _refreshSamples();
   }
 
-  // Method to send to FastAPI
-  Future<void> _runAI() async {
-    if (_selectedImage == null) return;
+  void _refreshSamples() {
+    setState(() {
+      _samplesFuture = _apiService.getSamples(widget.project.id);
+    });
+  }
+
+  Future<void> _captureAndRunAI() async {
+    final XFile? photo = await _picker.pickImage(source: ImageSource.camera);
+    if (photo == null) return;
 
     setState(() {
       _isProcessing = true;
     });
 
     try {
-      String? resultUrl = await _apiService.runInference(widget.project.id, _selectedImage!);
+      Sample? newSample = await _apiService.runInference(widget.project.id, File(photo.path));
       
       setState(() {
-        _annotatedImageUrl = resultUrl;
         _isProcessing = false;
       });
+
+      if (newSample != null) {
+        _refreshSamples();
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => SampleDetailScreen(sample: newSample)),
+        );
+      }
     } catch (e) {
       setState(() {
         _isProcessing = false;
@@ -64,113 +74,63 @@ class _InferenceScreenState extends State<InferenceScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Test AI: ${widget.project.name}'),
-        actions: [
-          if (_annotatedImageUrl != null)
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: () => setState(() {
-                _selectedImage = null;
-                _annotatedImageUrl = null;
-              }),
+        title: Text('Inference History: ${widget.project.name}'),
+      ),
+      body: _isProcessing
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 20),
+                  Text("AI is analyzing the image...\nThis may take a few seconds.", textAlign: TextAlign.center),
+                ],
+              ),
             )
-        ],
-      ),
-      body: Center(
-        child: _buildBodyContent(),
-      ),
-      floatingActionButton: (_isProcessing || _annotatedImageUrl != null) 
-          ? null 
-          : FloatingActionButton.extended(
-              onPressed: _captureImage,
-              icon: const Icon(Icons.camera_alt),
-              label: const Text('Capture Sample'),
-            ),
-    );
-  }
-
-  Widget _buildBodyContent() {
-    // State 1: Processing ML Model
-    if (_isProcessing) {
-      return const Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 20),
-          Text(
-            "AI is analyzing the image...\nThis may take a few seconds.",
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-          ),
-        ],
-      );
-    }
-
-    // State 2: Display Annotated Result
-    if (_annotatedImageUrl != null) {
-      return Column(
-        children: [
-          const Padding(
-            padding: EdgeInsets.all(8.0),
-            child: Text("Detection Results", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          ),
-          Expanded(
-            child: InteractiveViewer(
-              panEnabled: true,
-              boundaryMargin: const EdgeInsets.all(20),
-              minScale: 1,
-              maxScale: 4,
-              // Fetch image over HTTP from your FastAPI static storage
-              child: Image.network(
-                _annotatedImageUrl!,
-                fit: BoxFit.contain,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
+          : FutureBuilder<List<Sample>>(
+              future: _samplesFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
-                },
-                errorBuilder: (context, error, stackTrace) => 
-                  const Center(child: Text("Failed to load result image.", style: TextStyle(color: Colors.red))),
-              ),
-            ),
-          ),
-        ],
-      );
-    }
+                } else if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return const Center(child: Text('No inferences run yet. Tap the camera to start!'));
+                }
 
-    // State 3: Image Selected, ready to upload
-    if (_selectedImage != null) {
-      return Column(
-        children: [
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Image.file(_selectedImage!, fit: BoxFit.contain),
+                final samples = snapshot.data!;
+                return ListView.builder(
+                  itemCount: samples.length,
+                  itemBuilder: (context, index) {
+                    final sample = samples[index];
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: ListTile(
+                        leading: const Icon(Icons.image),
+                        title: Text('Run #${sample.id}'),
+                        subtitle: Text('Detections: ${sample.detections.length}\\nTime: ${sample.timestamp.toLocal().toString().substring(0, 16)}'),
+                        trailing: const Icon(Icons.arrow_forward_ios),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => SampleDetailScreen(sample: sample)),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                );
+              },
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20.0),
-            child: ElevatedButton.icon(
-              onPressed: _runAI,
-              icon: const Icon(Icons.memory),
-              label: const Text("Run Inference"),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                textStyle: const TextStyle(fontSize: 18),
-              ),
+      floatingActionButton: _isProcessing
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _captureAndRunAI,
+              backgroundColor: greenAccent,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.camera_alt),
+              label: const Text('Run New Inference'),
             ),
-          )
-        ],
-      );
-    }
-
-    // State 4: Default Empty State
-    return const Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(Icons.camera, size: 80, color: Colors.grey),
-        SizedBox(height: 16),
-        Text("No sample selected.\nTap the camera to capture a test image.", textAlign: TextAlign.center),
-      ],
     );
   }
 }

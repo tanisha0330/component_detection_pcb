@@ -36,6 +36,18 @@ async def validation_exception_handler(request, exc):
 
 os.makedirs("storage", exist_ok=True)
 os.makedirs("storage/samples", exist_ok=True)
+
+# Initialize JSON auth files
+ADMINS_FILE = "storage/admins.json"
+USERS_FILE = "storage/users.json"
+
+if not os.path.exists(ADMINS_FILE):
+    with open(ADMINS_FILE, "w") as f:
+        json.dump([{"email": "admin@plant.com", "password": "admin"}], f)
+
+if not os.path.exists(USERS_FILE):
+    with open(USERS_FILE, "w") as f:
+        json.dump([], f)
 app.mount("/storage", StaticFiles(directory="storage"), name="storage")
 
 # Include the ml_pipeline router rules cleanly
@@ -53,6 +65,11 @@ def create_project(project: schemas.ProjectCreate, db: Session = Depends(databas
 def read_projects(skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db)):
     projects = db.query(models.Project).offset(skip).limit(limit).all()
     return projects
+
+@app.get("/projects/{project_id}/samples", response_model=list[schemas.SampleResponse])
+def read_samples(project_id: int, db: Session = Depends(database.get_db)):
+    samples = db.query(models.Sample).filter(models.Sample.project_id == project_id).order_by(models.Sample.timestamp.desc()).all()
+    return samples
 
 @app.post("/projects/{project_id}/prototype")
 async def upload_prototype(
@@ -97,3 +114,43 @@ async def upload_prototype(
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
+
+@app.post("/api/login")
+def login(req: schemas.LoginRequest):
+    if req.role.lower() == "admin":
+        with open(ADMINS_FILE, "r") as f:
+            admins = json.load(f)
+        for admin in admins:
+            if admin["email"] == req.email_or_mobile and admin["password"] == req.password:
+                return {"status": "success", "role": "admin"}
+        raise HTTPException(status_code=401, detail="Invalid admin credentials")
+    
+    elif req.role.lower() == "user":
+        with open(USERS_FILE, "r") as f:
+            users = json.load(f)
+        for user in users:
+            if (user["email"] == req.email_or_mobile or user["mobile"] == req.email_or_mobile) and user["password"] == req.password:
+                return {"status": "success", "role": "user"}
+        raise HTTPException(status_code=401, detail="Invalid user credentials")
+    
+    raise HTTPException(status_code=400, detail="Invalid role specified")
+
+@app.post("/api/users")
+def create_user(user: schemas.UserCreate):
+    with open(USERS_FILE, "r") as f:
+        users = json.load(f)
+    
+    # Check if user already exists
+    if any(u["email"] == user.email for u in users):
+        raise HTTPException(status_code=400, detail="User with this email already exists")
+    
+    users.append({
+        "email": user.email,
+        "mobile": user.mobile,
+        "password": user.password
+    })
+    
+    with open(USERS_FILE, "w") as f:
+        json.dump(users, f, indent=4)
+        
+    return {"status": "success", "message": "User created successfully"}
