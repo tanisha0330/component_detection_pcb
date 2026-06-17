@@ -710,18 +710,69 @@ class _PrototypeEditorScreenState extends State<PrototypeEditorScreen> {
   //    - GestureDetector owns pan → _onDrawStart/Update/End (original logic)
 
   Widget _buildCanvas(Widget imageWidget) {
-    // Disable IV pan when actively resizing so the drag isn't swallowed
-    final bool ivPanEnabled =
-        !_isDrawingMode && _activeHandle == _ResizeHandle.none;
-    final bool ivScaleEnabled = true;
+    final Stack canvas = Stack(
+      fit: StackFit.expand,
+      children: [
+        imageWidget,
+        CustomPaint(
+          painter: CanvasBBoxPainter(
+            boxes: _boundingBoxes,
+            dragStartNorm: _dragStartNorm,
+            dragCurrentNorm: _dragCurrentNorm,
+            activeLabel: _selectedLabel,
+            selectedIndex: _selectedBoxIndex,
+          ),
+        ),
+      ],
+    );
+
+    // CRITICAL: Only wrap in a GestureDetector (which competes in the gesture
+    // arena and can block InteractiveViewer's pinch-zoom) when we actually need
+    // it — i.e., when drawing a box or actively resizing one.
+    // In pure navigate mode, use only the Listener (which is passive and NEVER
+    // blocks InteractiveViewer), so pinch-to-zoom always works.
+    final bool needsGestureDetector =
+        _isDrawingMode || _activeHandle != _ResizeHandle.none;
+
+    Widget inner = needsGestureDetector
+        ? GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onPanStart: _isDrawingMode ? _onDrawStart : null,
+            onPanUpdate: _isDrawingMode
+                ? _onDrawUpdate
+                : (_activeHandle != _ResizeHandle.none
+                    ? _onResizePanUpdate
+                    : null),
+            onPanEnd: _isDrawingMode
+                ? _onDrawEnd
+                : (_activeHandle != _ResizeHandle.none
+                    ? _onResizePanEnd
+                    : null),
+            onPanCancel: () {
+              if (mounted) {
+                setState(() {
+                  _dragStartNorm = null;
+                  _dragCurrentNorm = null;
+                });
+              }
+            },
+            child: canvas,
+          )
+        : canvas;
+
+    // Listener is always passive — it never blocks InteractiveViewer.
+    inner = Listener(
+      onPointerDown: _onPointerDown,
+      child: inner,
+    );
 
     return Container(
       color: const Color(0xFF0D1117),
       child: ClipRect(
         child: InteractiveViewer(
           transformationController: _transformationController,
-          panEnabled: ivPanEnabled,
-          scaleEnabled: ivScaleEnabled,
+          panEnabled: !_isDrawingMode && _activeHandle == _ResizeHandle.none,
+          scaleEnabled: true,  // pinch-zoom ALWAYS on
           minScale: 0.5,
           maxScale: 20.0,
           child: _imageAspect == null
@@ -729,51 +780,7 @@ class _PrototypeEditorScreenState extends State<PrototypeEditorScreen> {
               : Center(
                   child: AspectRatio(
                     aspectRatio: _imageAspect!,
-                    child: Listener(
-                      // Listener fires before the gesture arena resolves →
-                      // allows us to read pointer-down for selection without
-                      // blocking InteractiveViewer from claiming pinch/pan.
-                      onPointerDown: _onPointerDown,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        // Draw gestures (active only when label selected)
-                        onPanStart:
-                            _isDrawingMode ? _onDrawStart : null,
-                        onPanUpdate: _isDrawingMode
-                            ? _onDrawUpdate
-                            : (_activeHandle != _ResizeHandle.none
-                                ? _onResizePanUpdate
-                                : null),
-                        onPanEnd: _isDrawingMode
-                            ? _onDrawEnd
-                            : (_activeHandle != _ResizeHandle.none
-                                ? _onResizePanEnd
-                                : null),
-                        onPanCancel: () {
-                          if (mounted) {
-                            setState(() {
-                              _dragStartNorm = null;
-                              _dragCurrentNorm = null;
-                            });
-                          }
-                        },
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            imageWidget,
-                            CustomPaint(
-                              painter: CanvasBBoxPainter(
-                                boxes: _boundingBoxes,
-                                dragStartNorm: _dragStartNorm,
-                                dragCurrentNorm: _dragCurrentNorm,
-                                activeLabel: _selectedLabel,
-                                selectedIndex: _selectedBoxIndex,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                    child: inner,
                   ),
                 ),
         ),
