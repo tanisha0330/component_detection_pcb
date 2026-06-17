@@ -713,7 +713,7 @@ class _PrototypeEditorScreenState extends State<PrototypeEditorScreen> {
     // Disable IV pan when actively resizing so the drag isn't swallowed
     final bool ivPanEnabled =
         !_isDrawingMode && _activeHandle == _ResizeHandle.none;
-    final bool ivScaleEnabled = !_isDrawingMode;
+    final bool ivScaleEnabled = true;
 
     return Container(
       color: const Color(0xFF0D1117),
@@ -749,6 +749,14 @@ class _PrototypeEditorScreenState extends State<PrototypeEditorScreen> {
                             : (_activeHandle != _ResizeHandle.none
                                 ? _onResizePanEnd
                                 : null),
+                        onPanCancel: () {
+                          if (mounted) {
+                            setState(() {
+                              _dragStartNorm = null;
+                              _dragCurrentNorm = null;
+                            });
+                          }
+                        },
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
