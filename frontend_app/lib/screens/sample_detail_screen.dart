@@ -48,7 +48,7 @@ class _SampleDetailScreenState extends State<SampleDetailScreen> {
       }));
       _uiImage = await completer.future;
     } catch (e) {
-      debugPrint("Failed to load image: ${e}");
+      debugPrint("Failed to load image: $e");
     } finally {
       if (mounted) {
         setState(() {

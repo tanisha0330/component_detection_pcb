@@ -43,7 +43,7 @@ class ApiService {
     try {
       String url = '/projects/$projectId/inference';
       FormData formData = FormData.fromMap({
-        "file": await MultipartFile.fromFile(imageFile.path, filename: "sample.jpg"),
+        "file": await MultipartFile.fromFile(imageFile.path, filename: "sample_\${DateTime.now().millisecondsSinceEpoch}.jpg"),
       });
 
       // Create a temporary Dio instance with a LONG timeout for ML processing
