@@ -62,6 +62,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final ApiService _apiService = ApiService();
   late Future<List<Project>> _projectsFuture;
+  String _selectedFilter = 'All';
 
   @override
   void initState() {
@@ -109,6 +110,80 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  void _showLabelDialog(Project project) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.play_arrow),
+                title: const Text('Mark as ongoing'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _apiService.updateProjectLabel(project.id, 'ongoing');
+                  _refreshProjects();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.check_circle),
+                title: const Text('Mark as completed'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _apiService.updateProjectLabel(project.id, 'completed');
+                  _refreshProjects();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.label),
+                title: const Text('Mark custom...'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showCustomLabelDialog(project);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showCustomLabelDialog(Project project) {
+    final TextEditingController labelController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Set Custom Label'),
+          content: TextField(
+            controller: labelController,
+            decoration: const InputDecoration(hintText: "Enter custom label"),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (labelController.text.isNotEmpty) {
+                  await _apiService.updateProjectLabel(project.id, labelController.text);
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                  _refreshProjects();
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -138,33 +213,72 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           } else if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+            return Center(child: Text('Error: \${snapshot.error}'));
           } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return const Center(child: Text('No projects found. Create one!'));
           }
 
-          final projects = snapshot.data!;
-          return ListView.builder(
-            itemCount: projects.length,
-            itemBuilder: (context, index) {
-              final project = projects[index];
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: ListTile(
-                  title: Text(project.name),
-                  subtitle: Text('Created: ${project.createdAt.substring(0, 10)}'),
-                  trailing: const Icon(Icons.arrow_forward_ios),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ProjectHubScreen(project: project),
+          final allProjects = snapshot.data!;
+          final Set<String> labelSet = {'ongoing', 'completed'};
+          for (var p in allProjects) {
+            labelSet.add(p.label);
+          }
+          final List<String> availableFilters = ['All', ...labelSet.toList()];
+
+          final displayedProjects = allProjects.where((p) {
+            if (_selectedFilter == 'All') return true;
+            return p.label == _selectedFilter;
+          }).toList();
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: availableFilters.map((filter) {
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: FilterChip(
+                        label: Text(filter),
+                        selected: _selectedFilter == filter,
+                        onSelected: (selected) {
+                          setState(() {
+                            _selectedFilter = filter;
+                          });
+                        },
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: displayedProjects.length,
+                  itemBuilder: (context, index) {
+                    final project = displayedProjects[index];
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: ListTile(
+                        title: Text(project.name),
+                        subtitle: Text('Created: \${project.createdAt.substring(0, 10)}\nStatus: \${project.label}'),
+                        trailing: const Icon(Icons.arrow_forward_ios),
+                        onLongPress: () => _showLabelDialog(project),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ProjectHubScreen(project: project),
+                            ),
+                          );
+                        },
                       ),
                     );
                   },
                 ),
-              );
-            },
+              ),
+            ],
           );
         },
       ),

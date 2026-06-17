@@ -11,6 +11,10 @@ class ProjectResponse(BaseModel):
     name: str
     created_at: datetime
     prototype_path: Optional[str] = None
+    label: str = "ongoing"
+
+class ProjectLabelUpdate(BaseModel):
+    label: str
 
 class BoxIn(BaseModel):
     label: str

@@ -11,6 +11,7 @@ class Project(Base):
     name = Column(String, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     prototype_path = Column(String, nullable=True)
+    label = Column(String, default="ongoing")
 
     boxes = relationship("BoundingBox", back_populates="project")
     samples = relationship("Sample", back_populates="project")

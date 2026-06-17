@@ -5,12 +5,14 @@ class Project {
   final String name;
   final String createdAt;
   final String? prototypePath;
+  final String label;
 
   Project({
     required this.id,
     required this.name,
     required this.createdAt,
     this.prototypePath,
+    this.label = 'ongoing',
   });
 
   factory Project.fromJson(Map<String, dynamic> json) {
@@ -19,6 +21,7 @@ class Project {
       name: json['name'],
       createdAt: json['created_at'],
       prototypePath: json['prototype_path'],
+      label: json['label'] ?? 'ongoing',
     );
   }
 }

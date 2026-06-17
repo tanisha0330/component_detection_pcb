@@ -36,6 +36,16 @@ class ApiService {
     }
   }
 
+  Future<bool> updateProjectLabel(int projectId, String label) async {
+    try {
+      final response = await _dio.put('/projects/$projectId/label', data: {'label': label});
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint("Error updating project label: $e");
+      return false;
+    }
+  }
+
 
   // Add this inside lib/services/api_service.dart
 

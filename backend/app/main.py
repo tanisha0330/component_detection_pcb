@@ -66,6 +66,16 @@ def read_projects(skip: int = 0, limit: int = 100, db: Session = Depends(databas
     projects = db.query(models.Project).offset(skip).limit(limit).all()
     return projects
 
+@app.put("/projects/{project_id}/label", response_model=schemas.ProjectResponse)
+def update_project_label(project_id: int, label_update: schemas.ProjectLabelUpdate, db: Session = Depends(database.get_db)):
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project.label = label_update.label
+    db.commit()
+    db.refresh(project)
+    return project
+
 @app.get("/projects/{project_id}/samples", response_model=list[schemas.SampleResponse])
 def read_samples(project_id: int, db: Session = Depends(database.get_db)):
     samples = db.query(models.Sample).filter(models.Sample.project_id == project_id).order_by(models.Sample.timestamp.desc()).all()
