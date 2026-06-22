@@ -1,0 +1,65 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# docker-compose.yml – Component Detection App
+# ═══════════════════════════════════════════════════════════════════════════════
+
+version: "3.9"
+
+services:
+
+  # ── FastAPI Backend (GPU) ───────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: component_detection_backend
+    restart: unless-stopped
+
+    # Expose the API on the host
+    ports:
+      - "8000:8000"
+
+    # NVIDIA GPU access (requires nvidia-container-toolkit on the host)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    # ── YAHAN LIVE RELOAD (LIVE SYNC) ON KIYA GAYA HAI ──
+    volumes:
+      - ./backend:/app                # <-- Yeh line aapke laptop ke code ko Docker se live link karegi
+      - backend_storage:/app/storage  # <-- Yeh images ko safe rakhega
+
+    environment:
+      - PYTHONUNBUFFERED=1
+
+    healthcheck:
+      test: ["CMD", "python3", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s    # Give the AI models time to load on first start
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ── Flutter APK Builder (CPU only) ─────────────────────────────────────────
+  apk-build:
+    build:
+      context: ./frontend_app
+      dockerfile: Dockerfile
+    container_name: component_detection_apk_builder
+    profiles:
+      - build
+
+# ── Named volumes ───────────────────────────────────────────────────────────
+volumes:
+  backend_storage:
+    driver: local
+  # 'backend_db' volume yahan se hata diya gaya hai kyunki ab DB sidha aapke laptop par save hoga.

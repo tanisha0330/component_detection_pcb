@@ -131,13 +131,15 @@ class _SampleDetailScreenState extends State<SampleDetailScreen> {
                               child: SizedBox(
                                 width: _uiImage!.width.toDouble(),
                                 height: _uiImage!.height.toDouble(),
-                                child: CustomPaint(
-                                  foregroundPainter: BoundingBoxPainter(
-                                    detections: filteredDetections,
-                                    imageWidth: _uiImage!.width.toDouble(),
-                                    imageHeight: _uiImage!.height.toDouble(),
+                                child: RepaintBoundary(
+                                  child: CustomPaint(
+                                    foregroundPainter: BoundingBoxPainter(
+                                      detections: filteredDetections,
+                                      imageWidth: _uiImage!.width.toDouble(),
+                                      imageHeight: _uiImage!.height.toDouble(),
+                                    ),
+                                    child: RawImage(image: _uiImage),
                                   ),
-                                  child: RawImage(image: _uiImage),
                                 ),
                               ),
                             ),
@@ -191,11 +193,28 @@ class BoundingBoxPainter extends CustomPainter {
   final double imageWidth;
   final double imageHeight;
 
+  // Cache TextPainters to avoid rebuilding the glyph atlas every frame
+  final Map<String, TextPainter> _labelPainterCache = {};
+
   BoundingBoxPainter({
     required this.detections,
     required this.imageWidth,
     required this.imageHeight,
   });
+
+  TextPainter _getOrCreateLabelPainter(String text) {
+    return _labelPainterCache.putIfAbsent(text, () {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: text,
+          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      tp.layout();
+      return tp;
+    });
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -217,15 +236,9 @@ class BoundingBoxPainter extends CustomPainter {
       final rect = Rect.fromLTRB(d.bbox[0], d.bbox[1], d.bbox[2], d.bbox[3]);
       canvas.drawRect(rect, paint);
       
-      // Draw label background
-      final textPainter = TextPainter(
-        text: TextSpan(
-          text: "${d.label} ${(d.conf * 100).toStringAsFixed(0)}%",
-          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-        ),
-        textDirection: TextDirection.ltr,
-      );
-      textPainter.layout();
+      // Draw label background — use cached TextPainter
+      final labelText = "${d.label} ${(d.conf * 100).toStringAsFixed(0)}%";
+      final textPainter = _getOrCreateLabelPainter(labelText);
       
       final labelBgRect = Rect.fromLTWH(
         rect.left, 

@@ -7,12 +7,12 @@ import '../models/sample.dart';
 
 class ApiService {
   // Use your computer's exact local network IP address
-  static const String baseUrl = 'http://10.145.47.188:8000';
+  static const String baseUrl = 'http://10.145.7.54:8000'; 
 
   final Dio _dio = Dio(BaseOptions(
     baseUrl: baseUrl,
-    connectTimeout: const Duration(seconds: 30),
-    receiveTimeout: const Duration(seconds: 30),
+    connectTimeout: const Duration(seconds: 60),
+    receiveTimeout: const Duration(seconds: 60),
   ));
 
   Future<List<Project>> getProjects() async {
