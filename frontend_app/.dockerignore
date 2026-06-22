@@ -1,0 +1,31 @@
+# Flutter build output (rebuilt inside the container)
+build/
+
+# Dart tool cache
+.dart_tool/
+.pub-cache/
+.pub/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# Git
+.git/
+.gitignore
+
+# OS artefacts
+.DS_Store
+Thumbs.db
+
+# Android local config (SDK path will be set inside container)
+android/local.properties
+android/.gradle/
+android/app/build/
+
+# iOS build artefacts (not targeted in this Dockerfile)
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework/
+ios/Flutter/Flutter.podspec

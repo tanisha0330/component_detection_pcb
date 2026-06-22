@@ -1,0 +1,34 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Git
+.git/
+.gitignore
+
+# VS Code
+.vscode/
+
+# Test & utility scripts (not needed in the image)
+test_*.py
+check_db.py
+crop_boxes.py
+visualize_boxes.py
+
+# Local SQLite database (persisted via Docker volume instead)
+*.db
+
+# Logs
+*.log
+
+# OS artefacts
+.DS_Store
+Thumbs.db

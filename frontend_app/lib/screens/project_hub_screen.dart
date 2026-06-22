@@ -1,8 +1,8 @@
 // lib/screens/project_hub_screen.dart
 import 'package:flutter/material.dart';
 import '../models/project.dart';
-import 'prototype_editor_screen.dart';
 import 'inference_screen.dart';
+import 'prototype_editor_screen.dart';
 
 class ProjectHubScreen extends StatelessWidget {
   final Project project;
@@ -12,10 +12,7 @@ class ProjectHubScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(project.name),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: Text(project.name), centerTitle: true),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -25,9 +22,9 @@ class ProjectHubScreen extends StatelessWidget {
             Text(
               'Project Workspace',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
@@ -36,30 +33,33 @@ class ProjectHubScreen extends StatelessWidget {
               style: const TextStyle(color: Colors.grey, fontSize: 16),
             ),
             const SizedBox(height: 48),
-            
+
             // Card Button 1: Prototype Layout & Labeling Setup
             _buildHubCard(
               context: context,
               title: 'Setup Reference Layout',
-              subtitle: 'Upload a reference prototype image and define component bounding boxes with labels.',
+              subtitle:
+                  'Upload a reference prototype image and define component bounding boxes with labels.',
               icon: Icons.layers,
               onTap: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => PrototypeEditorScreen(project: project),
+                    builder: (context) =>
+                        PrototypeEditorScreen(project: project),
                   ),
                 );
               },
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // Card Button 2: Run Live Component Detection Inference
             _buildHubCard(
               context: context,
               title: 'Run AI Inference Test',
-              subtitle: 'Capture a test photo using the camera to predict and locate parts based on your reference model.',
+              subtitle:
+                  'Capture a test photo using the camera to predict and locate parts based on your reference model.',
               icon: Icons.memory,
               onTap: () {
                 Navigator.push(
@@ -121,10 +121,7 @@ class ProjectHubScreen extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     subtitle,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade600,
-                    ),
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
                   ),
                 ],
               ),
