@@ -7,7 +7,7 @@ import '../models/sample.dart';
 
 class ApiService {
   // Use your computer's exact local network IP address
-  static const String baseUrl = 'http://10.145.7.54:8000'; 
+  static const String baseUrl = 'http://172.18.64.1:8000'; 
 
   final Dio _dio = Dio(BaseOptions(
     baseUrl: baseUrl,
