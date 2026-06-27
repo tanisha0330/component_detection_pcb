@@ -20,6 +20,12 @@ from . import models, database
 router = APIRouter()
 inference_lock = asyncio.Lock()
 
+# --- ABSOLUTE PATH FIX ---
+STORAGE_DIR = "/app/storage"
+SAMPLES_DIR = os.path.join(STORAGE_DIR, "samples")
+os.makedirs(SAMPLES_DIR, exist_ok=True)
+# -------------------------
+
 # ─────────────────────────────────────────────────────────────
 # Per-class minimum confidence thresholds for YOLOE VP.
 # Capacitor is intentionally absent — it is handled by the
@@ -119,24 +125,27 @@ def save_boxes(
         db.refresh(box)
 
     # --- DEBUG: Draw saved boxes on prototype ---
-    if project.prototype_path and os.path.exists(project.prototype_path):
-        try:
-            source_image = Image.open(project.prototype_path).convert("RGB")
-            source_image = ImageOps.exif_transpose(source_image)
-            debug_proto = np.array(source_image)
-            
-            for b in payload.boxes:
-                x1, y1, x2, y2 = map(int, [b.x1, b.y1, b.x2, b.y2])
-                cv2.rectangle(debug_proto, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                cv2.putText(debug_proto, b.label, (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-            
-            os.makedirs("storage/samples", exist_ok=True)
-            cv2.imwrite("storage/samples/debug_save_boxes.jpg",
-                        cv2.cvtColor(debug_proto, cv2.COLOR_RGB2BGR))
-            print("Saved debug_save_boxes.jpg")
-        except Exception as e:
-            print(f"Failed to generate debug image: {e}")
+    if project.prototype_path:
+        proto_filename = os.path.basename(project.prototype_path)
+        actual_proto_path = os.path.join(STORAGE_DIR, proto_filename)
+        
+        if os.path.exists(actual_proto_path):
+            try:
+                source_image = Image.open(actual_proto_path).convert("RGB")
+                source_image = ImageOps.exif_transpose(source_image)
+                debug_proto = np.array(source_image)
+                
+                for b in payload.boxes:
+                    x1, y1, x2, y2 = map(int, [b.x1, b.y1, b.x2, b.y2])
+                    cv2.rectangle(debug_proto, (x1, y1), (x2, y2), (0, 0, 255), 3)
+                    cv2.putText(debug_proto, b.label, (x1, y1 - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                
+                cv2.imwrite(os.path.join(SAMPLES_DIR, "debug_save_boxes.jpg"),
+                            cv2.cvtColor(debug_proto, cv2.COLOR_RGB2BGR))
+                print("Saved debug_save_boxes.jpg")
+            except Exception as e:
+                print(f"Failed to generate debug image: {e}")
     # --------------------------------------------
 
     return new_boxes
@@ -148,8 +157,8 @@ def save_boxes(
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"ML Pipeline running on: {DEVICE.upper()}")
 if DEVICE == "cuda":
-    print(f"   GPU : {torch.cuda.get_device_name(0)}")
-    print(f"   VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
+    print(f"  GPU : {torch.cuda.get_device_name(0)}")
+    print(f"  VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -223,11 +232,6 @@ def filter_yoloe_by_threshold(
     detections: sv.Detections,
     class_names: list[str],
 ) -> sv.Detections:
-    """
-    Keep only detections whose confidence meets the per-class minimum
-    defined in YOLOE_CLASS_THRESHOLDS. Classes not listed in the dict
-    use a default threshold of 0.10.
-    """
     if len(detections) == 0:
         return detections
 
@@ -278,6 +282,13 @@ async def run_inference(
         if not project or not project.prototype_path:
             raise HTTPException(status_code=400, detail="Prototype missing.")
 
+        # Extract precise physical path for prototype
+        proto_filename = os.path.basename(project.prototype_path)
+        actual_proto_path = os.path.join(STORAGE_DIR, proto_filename)
+        
+        if not os.path.exists(actual_proto_path):
+            raise HTTPException(status_code=400, detail=f"Prototype file physically missing at {actual_proto_path}")
+
         # ── Resolve bounding boxes directly from Database ─────────
         print("\n── Bounding Box Source ──────────────────────────────────────")
         boxes_db = db.query(models.BoundingBox).filter(
@@ -295,15 +306,15 @@ async def run_inference(
         # ── Save uploaded target image ────────────────────────────
         run_id = uuid.uuid4().hex[:8]
         unique_filename = f"{run_id}_{file.filename}"
-        target_path = os.path.join("storage/samples", f"raw_{project_id}_{unique_filename}")
+        target_path = os.path.join(SAMPLES_DIR, f"raw_{project_id}_{unique_filename}")
         print(f"Step: Saving uploaded target image to {target_path}...")
         with open(target_path, "wb") as buffer:
             buffer.write(await file.read())
 
         try:
             # ── Load prototype ────────────────────────────────────
-            print("Step: Loading prototype image...")
-            source_image = Image.open(project.prototype_path).convert("RGB")
+            print(f"Step: Loading prototype image from {actual_proto_path}...")
+            source_image = Image.open(actual_proto_path).convert("RGB")
             print(f"Prototype size before EXIF: {source_image.size}")
             source_image = ImageOps.exif_transpose(source_image)
             print(f"Prototype size after EXIF:  {source_image.size}")
@@ -311,8 +322,6 @@ async def run_inference(
 
             # ── Build prompt bboxes (no capacitor) ───────────────
             print("Step: Building prompt bboxes (excluding capacitors)...")
-            # Filter out any "capacitor" boxes — those are handled
-            # exclusively by the trained model in Phase 3.
             prompt_box_dicts = [
                 b for b in raw_box_dicts
                 if b["label"].lower() != "capacitor"
@@ -347,7 +356,7 @@ async def run_inference(
                 cv2.rectangle(debug_proto, (x1, y1), (x2, y2), (0, 255, 0), 3)
                 cv2.putText(debug_proto, label, (x1, y1 - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-            cv2.imwrite("storage/samples/debug_prompt_boxes.jpg",
+            cv2.imwrite(os.path.join(SAMPLES_DIR, "debug_prompt_boxes.jpg"),
                         cv2.cvtColor(debug_proto, cv2.COLOR_RGB2BGR))
 
             # ── Load target image ─────────────────────────────────
@@ -406,13 +415,13 @@ async def run_inference(
                         cv2.cvtColor(aligned_target_cv, cv2.COLOR_BGR2RGB)
                     )
                     print(f"  Aligned size: {aligned_target_pil.size}")
-                    aligned_target_pil.save("storage/samples/debug_aligned.jpg")
+                    aligned_target_pil.save(os.path.join(SAMPLES_DIR, "debug_aligned.jpg"))
                     print("  debug_aligned.jpg saved")
             else:
                 print("  No board detected — using original image (no warp applied)")
 
             # =====================================================================
-            # PHASE 2: YOLOE VISUAL PROMPTING (all classes except capacitor)
+            # PHASE 2: YOLOE VISUAL PROMPTING
             # =====================================================================
             print("\n── Phase 2: YOLOE VP Inference ──────────────────────────────")
             print(f"  unique_labels : {unique_labels}")
@@ -431,7 +440,6 @@ async def run_inference(
             print("  Resizing model architecture to match prompt classes...")
             vp_model.set_classes(unique_labels, vp_model.get_text_pe(unique_labels))
 
-            # Step 1: Encode visual prompt embeddings from the PROTOTYPE image
             print("  Step 1: Encoding VPE from prototype...")
             vp_model.predict(
                 source_image,
@@ -442,24 +450,19 @@ async def run_inference(
                 imgsz=(640, 640),
             )
 
-            # Verify the right predictor was attached
             predictor_type = type(vp_model.predictor).__name__
             print(f"  Predictor type after VPE encode: {predictor_type}")
             if not hasattr(vp_model.predictor, 'vpe'):
                 raise RuntimeError(
-                    f"VPE encoding failed — predictor is '{predictor_type}', not YOLOEVPSegPredictor. "
-                    "Check your ultralytics/yoloe version."
+                    f"VPE encoding failed — predictor is '{predictor_type}', not YOLOEVPSegPredictor."
                 )
 
-            # Step 2: Save learned features as named classes inside the model
             print("  Step 2: Saving VPE as named classes...")
             vp_model.set_classes(unique_labels, vp_model.predictor.vpe)
 
-            # Step 3: Remove VP predictor — revert to standard detection mode
             vp_model.predictor = None
             print("  Step 3: VP predictor removed, switching to standard inference...")
 
-            # Step 4: Run inference on the ALIGNED TARGET image
             print("  Step 4: Running inference on target image...")
             inference_results = vp_model.predict(
                 aligned_target_pil,
@@ -471,7 +474,6 @@ async def run_inference(
             raw_yoloe_detections = sv.Detections.from_ultralytics(inference_results[0])
             print(f"  Raw YOLOE detections : {len(raw_yoloe_detections)}")
 
-            # Apply per-class confidence thresholds
             yoloe_detections = filter_yoloe_by_threshold(raw_yoloe_detections, unique_labels)
             print(f"  After threshold filter: {len(yoloe_detections)} detections kept")
 
@@ -496,7 +498,7 @@ async def run_inference(
                 print("  Warning: YOLOE returned 0 detections after threshold filtering.")
 
             # =====================================================================
-            # PHASE 3: CAPACITOR DETECTION via trained model (full aligned image)
+            # PHASE 3: CAPACITOR DETECTION via trained model
             # =====================================================================
             print("\n── Phase 3: Capacitor Detection (Trained Model) ─────────────")
             trained_results = trained_model.predict(
@@ -505,7 +507,6 @@ async def run_inference(
             trained_detections_all = sv.Detections.from_ultralytics(trained_results[0])
             print(f"  Trained model detections (all classes): {len(trained_detections_all)}")
 
-            # Keep only capacitor detections from the trained model
             capacitor_class_ids = [
                 idx
                 for idx, name in trained_model.names.items()
@@ -553,7 +554,6 @@ async def run_inference(
             final_labels_text: list = []
             raw_detections: list = []
 
-            # Add YOLOE VP detections (non-capacitor components)
             for cls_id, conf, bbox in zip(
                 yoloe_detections.class_id,
                 yoloe_detections.confidence,
@@ -573,7 +573,6 @@ async def run_inference(
                     "bbox": bbox.tolist()
                 })
 
-            # Add capacitor detections from trained model
             for cls_id, conf, bbox in zip(
                 capacitor_detections.class_id,
                 capacitor_detections.confidence,
@@ -616,15 +615,15 @@ async def run_inference(
                 )
 
             result_filename = f"result_{project_id}_{unique_filename}"
-            out_path = os.path.join("storage/samples", result_filename)
+            out_path = os.path.join(SAMPLES_DIR, result_filename)
             cv2.imwrite(out_path, cv2.cvtColor(annotated_image, cv2.COLOR_RGB2BGR))
             print(f"  Saved → {out_path}")
 
             raw_aligned_filename = f"aligned_raw_{project_id}_{unique_filename}"
-            raw_aligned_path = os.path.join("storage/samples", raw_aligned_filename)
+            raw_aligned_path = os.path.join(SAMPLES_DIR, raw_aligned_filename)
             aligned_target_pil.save(raw_aligned_path)
 
-            # Save to database
+            # DB paths frontend ke liye wahi (relative URL) rahenge
             db_sample = models.Sample(
                 project_id=project_id,
                 original_path=f"/storage/samples/{raw_aligned_filename}",
