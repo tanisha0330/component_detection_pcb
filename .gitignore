@@ -69,3 +69,8 @@ lib/generated_plugin_registrant.dart
 
 
 # End of https://mrkandreev.name/snippets/gitignore-generator/#Flutter,python,api
+# Large binary files
+backend/server_files.zip
+component_detection_fixed.apk
+*.apk
+*.zip
