@@ -34,12 +34,15 @@ async def validation_exception_handler(request, exc):
         pass
     return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
-os.makedirs("storage", exist_ok=True)
-os.makedirs("storage/samples", exist_ok=True)
+# --- HARDCODED DOCKER PATH ---
+STORAGE_DIR = "/app/storage"
+
+os.makedirs(STORAGE_DIR, exist_ok=True)
+os.makedirs(os.path.join(STORAGE_DIR, "samples"), exist_ok=True)
 
 # Initialize JSON auth files
-ADMINS_FILE = "storage/admins.json"
-USERS_FILE = "storage/users.json"
+ADMINS_FILE = os.path.join(STORAGE_DIR, "admins.json")
+USERS_FILE = os.path.join(STORAGE_DIR, "users.json")
 
 if not os.path.exists(ADMINS_FILE):
     with open(ADMINS_FILE, "w") as f:
@@ -48,7 +51,8 @@ if not os.path.exists(ADMINS_FILE):
 if not os.path.exists(USERS_FILE):
     with open(USERS_FILE, "w") as f:
         json.dump([], f)
-app.mount("/storage", StaticFiles(directory="storage"), name="storage")
+        
+app.mount("/storage", StaticFiles(directory=STORAGE_DIR), name="storage")
 
 # Include the ml_pipeline router rules cleanly
 app.include_router(ml_pipeline.router)
@@ -94,12 +98,13 @@ async def upload_prototype(
 
     file_extension = os.path.splitext(file.filename)[1]
     filename = f"project_{project_id}_proto{file_extension}"
-    file_path = os.path.join("storage", filename)
+    
+    file_path = os.path.join(STORAGE_DIR, filename)
     
     with open(file_path, "wb") as buffer:
         buffer.write(await file.read())
 
-    project.prototype_path = file_path
+    project.prototype_path = f"storage/{filename}"
     db.query(models.BoundingBox).filter(models.BoundingBox.project_id == project_id).delete()
 
     try:
@@ -119,7 +124,7 @@ async def upload_prototype(
         raise HTTPException(status_code=400, detail=f"Invalid boxes JSON data format: {e}")
 
     db.commit()
-    return {"status": "success", "prototype_path": file_path, "boxes_saved": len(parsed_boxes)}
+    return {"status": "success", "prototype_path": project.prototype_path, "boxes_saved": len(parsed_boxes)}
 
 @app.get("/health")
 def health_check():
@@ -150,7 +155,6 @@ def create_user(user: schemas.UserCreate):
     with open(USERS_FILE, "r") as f:
         users = json.load(f)
     
-    # Check if user already exists
     if any(u["email"] == user.email for u in users):
         raise HTTPException(status_code=400, detail="User with this email already exists")
     

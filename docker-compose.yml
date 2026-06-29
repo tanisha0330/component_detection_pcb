@@ -2,15 +2,11 @@
 # docker-compose.yml – Component Detection App
 # ═══════════════════════════════════════════════════════════════════════════════
 
-version: "3.9"
-
 services:
 
   # ── FastAPI Backend (GPU) ───────────────────────────────────────────────────
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: tutitata0303/pcb_detection:latest
     container_name: component_detection_backend
     restart: unless-stopped
 
@@ -27,13 +23,16 @@ services:
               count: all
               capabilities: [gpu]
 
-    # ── YAHAN LIVE RELOAD (LIVE SYNC) ON KIYA GAYA HAI ──
+    # ── Bind Mounts (Updated) ──
     volumes:
-      - ./backend:/app                # <-- Yeh line aapke laptop ke code ko Docker se live link karegi
-      - backend_storage:/app/storage  # <-- Yeh images ko safe rakhega
+      - ./backend/storage:/app/storage
+      # Naya updated ml_pipeline.py direct container me load hoga
+      - ./backend/app/ml_pipeline.py:/app/app/ml_pipeline.py
 
+    # ── Environment Variables (Memory Fix added) ──
     environment:
       - PYTHONUNBUFFERED=1
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
     healthcheck:
       test: ["CMD", "python3", "-c",
@@ -41,7 +40,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 90s    # Give the AI models time to load on first start
+      start_period: 90s
 
     logging:
       driver: "json-file"
@@ -57,9 +56,3 @@ services:
     container_name: component_detection_apk_builder
     profiles:
       - build
-
-# ── Named volumes ───────────────────────────────────────────────────────────
-volumes:
-  backend_storage:
-    driver: local
-  # 'backend_db' volume yahan se hata diya gaya hai kyunki ab DB sidha aapke laptop par save hoga.
