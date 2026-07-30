@@ -1,18 +1,42 @@
 // lib/screens/project_hub_screen.dart
 import 'package:flutter/material.dart';
 import '../models/project.dart';
+import '../services/api_service.dart';
 import 'inference_screen.dart';
 import 'prototype_editor_screen.dart';
 
-class ProjectHubScreen extends StatelessWidget {
+class ProjectHubScreen extends StatefulWidget {
   final Project project;
 
   const ProjectHubScreen({super.key, required this.project});
 
   @override
+  State<ProjectHubScreen> createState() => _ProjectHubScreenState();
+}
+
+class _ProjectHubScreenState extends State<ProjectHubScreen> {
+  final ApiService _apiService = ApiService();
+  late Project _project;
+
+  @override
+  void initState() {
+    super.initState();
+    _project = widget.project;
+  }
+
+  /// Re-fetches the project from the server so prototype uploads made in the
+  /// editor are reflected immediately, without needing an app restart.
+  Future<void> _refreshProject() async {
+    final updated = await _apiService.getProject(_project.id);
+    if (updated != null && mounted) {
+      setState(() => _project = updated);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(project.name), centerTitle: true),
+      appBar: AppBar(title: Text(_project.name), centerTitle: true),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -28,7 +52,7 @@ class ProjectHubScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'ID: ${project.id}',
+              'ID: ${_project.id}',
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.grey, fontSize: 16),
             ),
@@ -41,14 +65,15 @@ class ProjectHubScreen extends StatelessWidget {
               subtitle:
                   'Upload a reference prototype image and define component bounding boxes with labels.',
               icon: Icons.layers,
-              onTap: () {
-                Navigator.push(
+              onTap: () async {
+                await Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) =>
-                        PrototypeEditorScreen(project: project),
+                        PrototypeEditorScreen(project: _project),
                   ),
                 );
+                await _refreshProject();
               },
             ),
 
@@ -59,15 +84,16 @@ class ProjectHubScreen extends StatelessWidget {
               context: context,
               title: 'Run AI Inference Test',
               subtitle:
-                  'Capture a test photo using the camera to predict and locate parts based on your reference model.',
+                  'Capture a test photo using the camera or gallery to predict and locate parts based on your reference model.',
               icon: Icons.memory,
-              onTap: () {
-                Navigator.push(
+              onTap: () async {
+                await Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => InferenceScreen(project: project),
+                    builder: (context) => InferenceScreen(project: _project),
                   ),
                 );
+                await _refreshProject();
               },
             ),
           ],

@@ -14,7 +14,9 @@ class SampleDetailScreen extends StatefulWidget {
 
 class _SampleDetailScreenState extends State<SampleDetailScreen> {
   String _selectedFilter = 'ALL';
+  String _presenceFilter = 'ALL'; // 'ALL' | 'PRESENT' | 'MISSING'
   List<String> _uniqueLabels = ['ALL'];
+  Detection? _isolatedDetection;
   ui.Image? _uiImage;
   bool _isLoadingImage = true;
 
@@ -58,12 +60,34 @@ class _SampleDetailScreenState extends State<SampleDetailScreen> {
     }
   }
 
+  static const Map<String, String> _presenceLabels = {
+    'ALL': 'All',
+    'PRESENT': 'Present',
+    'MISSING': 'Missing',
+  };
+
+  /// Tapping a detection in the bottom list isolates it in the
+  /// visualization (hides every other box); tapping the same one again
+  /// restores the normal filtered view.
+  void _toggleIsolate(Detection d) {
+    setState(() {
+      _isolatedDetection = _isolatedDetection == d ? null : d;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     List<Detection> filteredDetections = widget.sample.detections.where((d) {
-      if (_selectedFilter == 'ALL') return true;
-      return d.label == _selectedFilter;
+      if (_selectedFilter != 'ALL' && d.label != _selectedFilter) return false;
+      if (_presenceFilter == 'PRESENT' && d.presence != 'present') return false;
+      if (_presenceFilter == 'MISSING' && d.presence != 'missing') return false;
+      return true;
     }).toList();
+
+    // An isolated detection takes over the visualization/list entirely,
+    // showing just that one box until the user taps it again.
+    final List<Detection> displayedDetections =
+        _isolatedDetection != null ? [_isolatedDetection!] : filteredDetections;
 
     return Scaffold(
       appBar: AppBar(
@@ -71,9 +95,9 @@ class _SampleDetailScreenState extends State<SampleDetailScreen> {
       ),
       body: Column(
         children: [
-          // Filter Dropdown
+          // Filters
           Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Row(
               children: [
                 Text("Filter: ", style: TextStyle(fontWeight: FontWeight.bold, color: darkBrown, fontSize: 16)),
@@ -100,10 +124,40 @@ class _SampleDetailScreenState extends State<SampleDetailScreen> {
                           if (val != null) {
                             setState(() {
                               _selectedFilter = val;
+                              _isolatedDetection = null;
                             });
                           }
                         },
                       ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Rating filter (present / missing, from DINOv2 detection)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Row(
+              children: [
+                Text("Rating: ", style: TextStyle(fontWeight: FontWeight.bold, color: darkBrown, fontSize: 16)),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: SegmentedButton<String>(
+                    segments: _presenceLabels.entries
+                        .map((e) => ButtonSegment<String>(value: e.key, label: Text(e.value)))
+                        .toList(),
+                    selected: {_presenceFilter},
+                    onSelectionChanged: (sel) {
+                      setState(() {
+                        _presenceFilter = sel.first;
+                        _isolatedDetection = null;
+                      });
+                    },
+                    style: SegmentedButton.styleFrom(
+                      selectedBackgroundColor: greenAccent,
+                      selectedForegroundColor: Colors.white,
                     ),
                   ),
                 ),
@@ -134,7 +188,7 @@ class _SampleDetailScreenState extends State<SampleDetailScreen> {
                                 child: RepaintBoundary(
                                   child: CustomPaint(
                                     foregroundPainter: BoundingBoxPainter(
-                                      detections: filteredDetections,
+                                      detections: displayedDetections,
                                       imageWidth: _uiImage!.width.toDouble(),
                                       imageHeight: _uiImage!.height.toDouble(),
                                     ),
@@ -148,7 +202,7 @@ class _SampleDetailScreenState extends State<SampleDetailScreen> {
             ),
           ),
 
-          // List of Filtered Results
+          // List of Filtered Results — tap one to isolate it in the view above
           Expanded(
             flex: 1,
             child: Container(
@@ -160,7 +214,9 @@ class _SampleDetailScreenState extends State<SampleDetailScreen> {
                     color: darkBrown,
                     padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                     child: Text(
-                      "Detected Components (${filteredDetections.length})",
+                      _isolatedDetection != null
+                          ? "Showing 1 of ${filteredDetections.length} (tap again to reset)"
+                          : "Detected Components (${filteredDetections.length})",
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                     ),
                   ),
@@ -169,11 +225,21 @@ class _SampleDetailScreenState extends State<SampleDetailScreen> {
                       itemCount: filteredDetections.length,
                       itemBuilder: (context, index) {
                         final d = filteredDetections[index];
+                        final bool isIsolated = _isolatedDetection == d;
                         return ListTile(
-                          title: Text(d.label, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          trailing: Text("${(d.conf * 100).toStringAsFixed(1)}%", 
+                          selected: isIsolated,
+                          selectedTileColor: greenAccent.withAlpha(31),
+                          leading: Icon(
+                            d.isMissing ? Icons.error_outline : Icons.check_circle_outline,
+                            color: d.isMissing ? Colors.redAccent : Colors.green,
+                          ),
+                          title: Text(d.displayLabel,
+                              style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: d.isMissing ? const Text('MISSING', style: TextStyle(color: Colors.redAccent)) : null,
+                          trailing: Text("${(d.conf * 100).toStringAsFixed(1)}%",
                               style: TextStyle(color: greenAccent, fontWeight: FontWeight.w600)),
                           dense: true,
+                          onTap: () => _toggleIsolate(d),
                         );
                       },
                     ),
@@ -227,29 +293,25 @@ class BoundingBoxPainter extends CustomPainter {
       ..strokeWidth = 3.0;
 
     for (var d in detections) {
-      if (d.label.contains("CAPACITOR")) {
-        paint.color = Colors.blue;
-      } else {
-        paint.color = Colors.redAccent;
-      }
+      paint.color = d.isMissing ? Colors.redAccent : Colors.greenAccent.shade400;
 
       final rect = Rect.fromLTRB(d.bbox[0], d.bbox[1], d.bbox[2], d.bbox[3]);
       canvas.drawRect(rect, paint);
-      
+
       // Draw label background — use cached TextPainter
-      final labelText = "${d.label} ${(d.conf * 100).toStringAsFixed(0)}%";
+      final labelText = d.isMissing ? "MISSING ${d.label}" : d.displayLabel;
       final textPainter = _getOrCreateLabelPainter(labelText);
-      
+
       final labelBgRect = Rect.fromLTWH(
-        rect.left, 
-        rect.top - textPainter.height, 
-        textPainter.width + 4, 
+        rect.left,
+        rect.top - textPainter.height,
+        textPainter.width + 4,
         textPainter.height
       );
-      
+
       final bgPaint = Paint()..color = paint.color..style = PaintingStyle.fill;
       canvas.drawRect(labelBgRect, bgPaint);
-      
+
       textPainter.paint(canvas, Offset(rect.left + 2, rect.top - textPainter.height));
     }
   }

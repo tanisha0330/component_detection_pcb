@@ -3,7 +3,14 @@
 # Generated from actual imports in:
 #   app/main.py, app/ml_pipeline.py, app/models.py,
 #   app/schemas.py, app/database.py
+#
+# Setup: see the root README.md for full first-time setup instructions.
+# NOTE: torch/torchvision/torchaudio below are CUDA 11.8 builds (the
+# "+cu118" suffix) — they are NOT on the default PyPI index. The line below
+# adds PyTorch's own index as a fallback so a plain `pip install -r
+# requirements.txt` resolves them correctly in one shot.
 # =============================================================================
+--extra-index-url https://download.pytorch.org/whl/cu118
 
 # ── Web Framework ─────────────────────────────────────────────────────────────
 fastapi==0.136.3
@@ -84,6 +91,17 @@ charset-normalizer==3.4.7
 
 # ── TIMM (vision model zoo — ultralytics dep) ─────────────────────────────────
 timm==1.0.27
+
+# ── EasyOCR (component marking/rating identification) ─────────────────────────
+easyocr==1.7.2
+python-bidi==0.6.11
+Shapely==2.1.2
+pyclipper==1.4.0
+ninja==1.13.0
+scikit-image==0.26.0
+imageio==2.37.3
+tifffile==2026.3.3
+lazy-loader==0.5
 
 # ── Async / Network ───────────────────────────────────────────────────────────
 aiohttp==3.14.1

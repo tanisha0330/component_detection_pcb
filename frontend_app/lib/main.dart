@@ -144,11 +144,68 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _showCustomLabelDialog(project);
                 },
               ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.delete_forever, color: Colors.red),
+                title: const Text('Delete project',
+                    style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _confirmDeleteProject(project);
+                },
+              ),
             ],
           ),
         );
       },
     );
+  }
+
+  Future<void> _confirmDeleteProject(Project project) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Delete Project'),
+          content: Text(
+              'Are you sure you want to delete "${project.name}"? '
+              'This will permanently remove its prototype, labels, and all '
+              'inference history. This cannot be undone.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    final bool success = await _apiService.deleteProject(project.id);
+    if (!mounted) return;
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('"${project.name}" deleted'),
+        backgroundColor: Colors.green,
+      ));
+      _refreshProjects();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Failed to delete project'),
+        backgroundColor: Colors.red,
+      ));
+    }
   }
 
   void _showCustomLabelDialog(Project project) {

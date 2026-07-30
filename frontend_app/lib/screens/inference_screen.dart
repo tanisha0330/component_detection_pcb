@@ -18,6 +18,7 @@ class InferenceScreen extends StatefulWidget {
 class _InferenceScreenState extends State<InferenceScreen> {
   bool _isProcessing = false;
   late Future<List<Sample>> _samplesFuture;
+  late Project _project;
 
   final ImagePicker _picker = ImagePicker();
   final ApiService _apiService = ApiService();
@@ -28,19 +29,55 @@ class _InferenceScreenState extends State<InferenceScreen> {
   @override
   void initState() {
     super.initState();
+    _project = widget.project;
     _refreshSamples();
   }
 
   void _refreshSamples() {
     setState(() {
-      _samplesFuture = _apiService.getSamples(widget.project.id);
+      _samplesFuture = _apiService.getSamples(_project.id);
     });
+  }
+
+  /// Re-fetches the project so a prototype uploaded from this screen is
+  /// reflected immediately, without needing an app restart.
+  Future<void> _refreshProject() async {
+    final updated = await _apiService.getProject(_project.id);
+    if (updated != null && mounted) {
+      setState(() => _project = updated);
+    }
   }
 
   /// Returns true if a prototype has been uploaded for this project.
   bool get _hasPrototype =>
-      widget.project.prototypePath != null &&
-      widget.project.prototypePath!.isNotEmpty;
+      _project.prototypePath != null && _project.prototypePath!.isNotEmpty;
+
+  /// Shows a bottom sheet letting the user pick Camera or Gallery as the
+  /// image source. Returns null if the user dismisses without choosing.
+  Future<ImageSource?> _pickImageSource() {
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Take Photo'),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Choose from Gallery'),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   /// Shows a dialog prompting the user to upload a prototype first.
   Future<void> _showNoPrototypeDialog() async {
@@ -85,11 +122,11 @@ class _InferenceScreenState extends State<InferenceScreen> {
                   context,
                   MaterialPageRoute(
                     builder: (context) =>
-                        PrototypeEditorScreen(project: widget.project),
+                        PrototypeEditorScreen(project: _project),
                   ),
-                ).then((_) {
-                  // Refresh samples after returning from the editor
-                  // (the project may now have a prototype)
+                ).then((_) async {
+                  // Refresh the project (prototype may now exist) and samples
+                  await _refreshProject();
                   _refreshSamples();
                 });
               },
@@ -107,7 +144,10 @@ class _InferenceScreenState extends State<InferenceScreen> {
       return;
     }
 
-    final XFile? photo = await _picker.pickImage(source: ImageSource.camera);
+    final ImageSource? source = await _pickImageSource();
+    if (source == null) return;
+
+    final XFile? photo = await _picker.pickImage(source: source);
     if (photo == null) return;
 
     setState(() {
@@ -116,7 +156,7 @@ class _InferenceScreenState extends State<InferenceScreen> {
 
     try {
       Sample? newSample =
-          await _apiService.runInference(widget.project.id, File(photo.path));
+          await _apiService.runInference(_project.id, File(photo.path));
 
       setState(() {
         _isProcessing = false;
@@ -141,10 +181,15 @@ class _InferenceScreenState extends State<InferenceScreen> {
       if (!_hasPrototype) {
         await _showNoPrototypeDialog();
       } else {
+        String msg = e.toString();
+        if (msg.startsWith('Exception: ')) {
+          msg = msg.substring('Exception: '.length);
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('AI Processing failed: $e'),
-              backgroundColor: Colors.red),
+              content: Text(msg),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 6)),
         );
       }
     }
@@ -154,7 +199,7 @@ class _InferenceScreenState extends State<InferenceScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Inference History: ${widget.project.name}'),
+        title: Text('Inference History: ${_project.name}'),
       ),
       body: _isProcessing
           ? const Center(
@@ -315,9 +360,12 @@ class _InferenceScreenState extends State<InferenceScreen> {
                   context,
                   MaterialPageRoute(
                     builder: (context) =>
-                        PrototypeEditorScreen(project: widget.project),
+                        PrototypeEditorScreen(project: _project),
                   ),
-                ).then((_) => _refreshSamples());
+                ).then((_) async {
+                  await _refreshProject();
+                  _refreshSamples();
+                });
               },
             ),
           ],

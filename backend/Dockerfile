@@ -60,7 +60,17 @@ RUN pip install --no-cache-dir \
         psutil==7.2.2 \
         requests==2.34.2 \
         aiohttp==3.14.1 \
-        tqdm==4.68.1
+        tqdm==4.68.1 \
+        easyocr==1.7.2
+
+# Pre-warm the DINOv2 torch.hub cache (missing-component detection) and the
+# EasyOCR model cache (marking/rating OCR) so the weights are baked into the
+# image instead of being fetched on first inference request (this build
+# stage has internet; the runtime container may not).
+RUN python3.11 -c "import torch; torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14', trust_repo=True)" \
+    || echo "WARNING: could not pre-warm DINOv2 weights - missing-component detection will be disabled at runtime"
+RUN python3.11 -c "import easyocr; easyocr.Reader(['en'], gpu=False, verbose=False)" \
+    || echo "WARNING: could not pre-warm EasyOCR weights - marking/rating OCR will be disabled at runtime"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2 – Runtime image
@@ -84,13 +94,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
+# DINOv2 (torch.hub) and EasyOCR model caches, pre-warmed in the builder stage
+COPY --from=builder /root/.cache/torch /root/.cache/torch
+COPY --from=builder /root/.EasyOCR    /root/.EasyOCR
+
 WORKDIR /app
 
 COPY app/ ./app/
 
-COPY yoloe-v8l-seg.pt           ./yoloe-v8l-seg.pt
-COPY yolov10n_pcb_10classes_best.pt ./yolov10n_pcb_10classes_best.pt
-COPY mobileclip_blt.pt         ./mobileclip_blt.pt
+COPY pcb_anchor_yolo.pt         ./pcb_anchor_yolo.pt
+COPY FastSAM-x.pt               ./FastSAM-x.pt
 
 RUN mkdir -p storage/samples
 

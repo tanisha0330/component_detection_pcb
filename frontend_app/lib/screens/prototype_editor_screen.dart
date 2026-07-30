@@ -91,6 +91,14 @@ class _PrototypeEditorScreenState extends State<PrototypeEditorScreen> {
   bool _isLoading = false;
   String? _selectedLabel;
 
+  // ── labels — base list + any custom labels added this session/loaded ───────
+  final List<String> _labels = List<String>.from(kAvailableLabels);
+
+  void _addLabelIfNew(String label) {
+    final exists = _labels.any((l) => l.toLowerCase() == label.toLowerCase());
+    if (!exists) _labels.add(label);
+  }
+
   // ── debug ───────────────────────────────────────────────────────────────────
   bool _showDebugPanel = false;
   final List<String> _debugLog = [];
@@ -157,13 +165,16 @@ class _PrototypeEditorScreenState extends State<PrototypeEditorScreen> {
             final double ny1 = (box['y1'] as num) / originalSize.height;
             final double nx2 = (box['x2'] as num) / originalSize.width;
             final double ny2 = (box['y2'] as num) / originalSize.height;
-            _log('  box label=${box['label']}  '
+            final String label = box['label'] ?? 'target_component';
+            _log('  box label=$label  '
                 'px=(${box['x1']},${box['y1']},${box['x2']},${box['y2']}) '
                 '→ norm=($nx1,$ny1,$nx2,$ny2)');
             _boundingBoxes.add(BoundingBoxRect(
               x1: nx1, y1: ny1, x2: nx2, y2: ny2,
-              label: box['label'] ?? 'target_component',
+              label: label,
             ));
+            // Surface any pre-existing custom label as a selectable chip
+            _addLabelIfNew(label);
           }
         });
       }
@@ -472,8 +483,40 @@ class _PrototypeEditorScreenState extends State<PrototypeEditorScreen> {
   // IMAGE PICKER  (original logic, untouched)
   // ─────────────────────────────────────────────────────────────────────────────
 
+  /// Shows a bottom sheet letting the user pick Camera or Gallery as the
+  /// image source. Returns null if the user dismisses without choosing.
+  Future<ImageSource?> _pickImageSource() {
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: const Color(0xFF161B22),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt, color: Colors.white70),
+                title: const Text('Take Photo',
+                    style: TextStyle(color: Colors.white)),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: Colors.white70),
+                title: const Text('Choose from Gallery',
+                    style: TextStyle(color: Colors.white)),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _pickImage() async {
-    final XFile? picked = await _picker.pickImage(source: ImageSource.gallery);
+    final ImageSource? source = await _pickImageSource();
+    if (source == null) return;
+    final XFile? picked = await _picker.pickImage(source: source);
     if (picked == null) return;
     setState(() => _isLoading = true);
     _localImageFile = File(picked.path);
@@ -814,10 +857,38 @@ class _PrototypeEditorScreenState extends State<PrototypeEditorScreen> {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        itemCount: kAvailableLabels.length,
+        itemCount: _labels.length + 1, // +1 for the "add custom label" chip
         separatorBuilder: (_, _) => const SizedBox(width: 6),
         itemBuilder: (context, index) {
-          final label = kAvailableLabels[index];
+          if (index == _labels.length) {
+            return GestureDetector(
+              onTap: _showAddCustomLabelDialog,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF21262D),
+                  border: Border.all(
+                      color: const Color(0xFF58A6FF), width: 1.0),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.add, size: 14, color: Color(0xFF58A6FF)),
+                    SizedBox(width: 4),
+                    Text('Custom label',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF58A6FF))),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          final label = _labels[index];
           final isSelected = _selectedLabel == label;
           final chipColor = getColorForLabel(label);
           final count = _boundingBoxes.where((b) => b.label == label).length;
@@ -879,6 +950,54 @@ class _PrototypeEditorScreenState extends State<PrototypeEditorScreen> {
         },
       ),
     );
+  }
+
+  // ── Custom label dialog ──────────────────────────────────────────────────────
+
+  Future<void> _showAddCustomLabelDialog() async {
+    final TextEditingController controller = TextEditingController();
+    final String? newLabel = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF161B22),
+          title: const Text('Add Custom Label',
+              style: TextStyle(color: Colors.white)),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+              hintText: 'e.g. fuse, ferrite bead...',
+              hintStyle: TextStyle(color: Colors.white38),
+            ),
+            onSubmitted: (value) => Navigator.pop(context, value.trim()),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () =>
+                  Navigator.pop(context, controller.text.trim()),
+              child: const Text('Add'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (newLabel == null || newLabel.isEmpty) return;
+
+    _log('Custom label added: $newLabel');
+    setState(() {
+      _addLabelIfNew(newLabel);
+      _selectedLabel = newLabel;
+      _isDrawingMode = true;
+      _selectedBoxIndex = null;
+      _activeHandle = _ResizeHandle.none;
+    });
   }
 
   // ── Action row ───────────────────────────────────────────────────────────────

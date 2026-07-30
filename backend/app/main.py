@@ -34,8 +34,9 @@ async def validation_exception_handler(request, exc):
         pass
     return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
-# --- HARDCODED DOCKER PATH ---
-STORAGE_DIR = "/app/storage"
+# Relative to CWD: resolves to /app/storage in Docker (WORKDIR /app) and to
+# backend/storage when run locally via `uvicorn app.main:app` from backend/.
+STORAGE_DIR = "storage"
 
 os.makedirs(STORAGE_DIR, exist_ok=True)
 os.makedirs(os.path.join(STORAGE_DIR, "samples"), exist_ok=True)
@@ -69,6 +70,33 @@ def create_project(project: schemas.ProjectCreate, db: Session = Depends(databas
 def read_projects(skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db)):
     projects = db.query(models.Project).offset(skip).limit(limit).all()
     return projects
+
+@app.get("/projects/{project_id}", response_model=schemas.ProjectResponse)
+def read_project(project_id: int, db: Session = Depends(database.get_db)):
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+@app.delete("/projects/{project_id}")
+def delete_project(project_id: int, db: Session = Depends(database.get_db)):
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if project.prototype_path:
+        proto_file = os.path.join(STORAGE_DIR, os.path.basename(project.prototype_path))
+        if os.path.exists(proto_file):
+            try:
+                os.remove(proto_file)
+            except OSError as e:
+                print(f"Failed to remove prototype file: {e}")
+
+    db.query(models.BoundingBox).filter(models.BoundingBox.project_id == project_id).delete()
+    db.query(models.Sample).filter(models.Sample.project_id == project_id).delete()
+    db.delete(project)
+    db.commit()
+    return {"status": "success", "message": "Project deleted"}
 
 @app.put("/projects/{project_id}/label", response_model=schemas.ProjectResponse)
 def update_project_label(project_id: int, label_update: schemas.ProjectLabelUpdate, db: Session = Depends(database.get_db)):
