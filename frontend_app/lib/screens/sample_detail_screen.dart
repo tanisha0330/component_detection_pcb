@@ -235,7 +235,13 @@ class _SampleDetailScreenState extends State<SampleDetailScreen> {
                           ),
                           title: Text(d.displayLabel,
                               style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: d.isMissing ? const Text('MISSING', style: TextStyle(color: Colors.redAccent)) : null,
+                          subtitle: d.isMissing
+                              ? Text(
+                                  'MISSING  •  DINO ${d.similarity != null ? d.similarity!.toStringAsFixed(3) : "-"}'
+                                  '  •  SSIM ${d.ssim != null ? d.ssim!.toStringAsFixed(3) : "-"}',
+                                  style: const TextStyle(color: Colors.redAccent),
+                                )
+                              : null,
                           trailing: Text("${(d.conf * 100).toStringAsFixed(1)}%",
                               style: TextStyle(color: greenAccent, fontWeight: FontWeight.w600)),
                           dense: true,

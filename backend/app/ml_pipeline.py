@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import torchvision.transforms as T
 from PIL import Image, ImageOps
+from skimage.metrics import structural_similarity as ssim_func
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.orm import Session
 from ultralytics import YOLO, FastSAM
@@ -80,10 +81,19 @@ PIPELINE_CONFIG = {
                                # crop below which a component is flagged
                                # "missing" (empty/unpopulated pad).
                                # LOWER = more lenient, HIGHER = stricter.
+                               # Used for any class not in
+                               # dino_sim_thresh_by_class below.
+    "dino_sim_thresh_by_class": {
+        # Small passives show much less present/missing score separation
+        # than large-marking classes like IC (present ~0.65-0.73 vs a
+        # genuine miss ~0.40, with normal shot-to-shot lighting/pose noise
+        # alone crossing the default 0.65 threshold). Lower cutoff for
+        # these keeps real misses (score well under 0.5) flagged while
+        # clearing that noise band.
+        "resistor": 0.55,
+        "capacitor": 0.55,
+    },
     "dino_pad_px": 12,        # context margin around each crop for DINOv2
-    "dino_black_thresh": 0.4, # fraction of black pixels in a crop above
-                               # which it's treated as "no coverage" (out
-                               # of the warped frame) rather than compared
 
     # ---- EasyOCR component marking/rating identification ----
     "ocr_conf_thresh": 0.35,   # min EasyOCR confidence to keep a text token
@@ -516,13 +526,6 @@ def get_padded_crop(img, bbox, pad):
     return img[y1:y2, x1:x2]
 
 
-def is_black_crop(crop, thresh):
-    """True if a crop is mostly black (out-of-frame / no real content)."""
-    if crop is None or crop.size == 0:
-        return True
-    return bool((crop.sum(axis=2) == 0).mean() > thresh)
-
-
 def embed_crop(crop):
     """Embed a single crop with DINOv2. Returns a 384-dim unit vector,
     or None if DINOv2 isn't available / the crop is empty."""
@@ -542,6 +545,29 @@ def cosine_sim(a, b):
     if a is None or b is None:
         return None
     return float(np.dot(a, b))
+
+
+def compute_ssim(crop_a, crop_b):
+    """Structural similarity (pixel-level) between a golden and test crop,
+    as a second, independent signal alongside the DINOv2 semantic score —
+    the two can diverge (e.g. DINO score swings between shots of the same
+    defect due to lighting/alignment noise), so surfacing both lets a human
+    judge a "missing" call instead of trusting one score blindly."""
+    if crop_a is None or crop_a.size == 0 or crop_b is None or crop_b.size == 0:
+        return None
+    ga = cv2.cvtColor(crop_a, cv2.COLOR_RGB2GRAY) if crop_a.ndim == 3 else crop_a
+    gb = cv2.cvtColor(crop_b, cv2.COLOR_RGB2GRAY) if crop_b.ndim == 3 else crop_b
+    h, w = ga.shape[:2]
+    if h < 7 or w < 7:
+        return None
+    gb = cv2.resize(gb, (w, h))
+    win_size = min(7, h, w)
+    if win_size % 2 == 0:
+        win_size -= 1
+    try:
+        return float(ssim_func(ga, gb, win_size=win_size))
+    except Exception:
+        return None
 
 
 def preprocess_for_ocr(crop, upscale, max_dim):
@@ -886,11 +912,13 @@ async def run_inference(
                 # ---- presence: DINOv2 similarity between golden and test crop ----
                 g_crop_dino = get_padded_crop(golden_img, d["bbox_golden"], PIPELINE_CONFIG["dino_pad_px"])
                 t_crop_dino = get_padded_crop(test_warped, d["bbox"], PIPELINE_CONFIG["dino_pad_px"])
-                if DINO_AVAILABLE and not is_black_crop(t_crop_dino, PIPELINE_CONFIG["dino_black_thresh"]):
+                if DINO_AVAILABLE:
                     sim = cosine_sim(embed_crop(g_crop_dino), embed_crop(t_crop_dino))
                     d["similarity"] = sim
+                    sim_thresh = PIPELINE_CONFIG["dino_sim_thresh_by_class"].get(
+                        str(d["label"]).lower(), PIPELINE_CONFIG["dino_sim_thresh"])
                     d["presence"] = (
-                        "present" if (sim is not None and sim >= PIPELINE_CONFIG["dino_sim_thresh"])
+                        "present" if (sim is not None and sim >= sim_thresh)
                         else "missing"
                     )
                     if d["presence"] == "missing":
@@ -899,13 +927,18 @@ async def run_inference(
                     d["similarity"] = None
                     d["presence"] = "present"
 
+                d["ssim"] = compute_ssim(g_crop_dino, t_crop_dino)
+
                 # ---- marking/rating: EasyOCR on golden + test crops ----
                 golden_text = run_ocr(g_crop_ocr, PIPELINE_CONFIG)
                 test_text = run_ocr(t_crop_ocr, PIPELINE_CONFIG)
                 d["marking"] = best_reading(golden_text, test_text)
 
+                sim_str = f"{d['similarity']:.3f}" if d['similarity'] is not None else "-"
+                ssim_str = f"{d['ssim']:.3f}" if d['ssim'] is not None else "-"
                 print(f"  [{_i+1}/{len(final_dets)}] {d['label']:<16} "
                       f"{_time.monotonic() - _t0:.2f}s  presence={d['presence']}"
+                      f"  sim={sim_str}  ssim={ssim_str}"
                       f"  marking={d['marking'] or '-'}")
 
             print(f"  Present: {len(final_dets) - missing_ct}  Missing: {missing_ct}"
@@ -939,6 +972,7 @@ async def run_inference(
                     "marking": d["marking"],
                     "presence": d["presence"],
                     "similarity": d["similarity"],
+                    "ssim": d["ssim"],
                 })
 
             final_detections_count = len(raw_detections)

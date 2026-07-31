@@ -8,6 +8,7 @@ class Detection {
   final String marking; // EasyOCR-read rating/value marking, e.g. "322"
   final String presence; // "present" | "missing" (DINOv2 similarity check)
   final double? similarity; // raw DINOv2 cosine similarity, if available
+  final double? ssim; // raw structural similarity (pixel-level), if available
 
   Detection({
     required this.label,
@@ -16,6 +17,7 @@ class Detection {
     this.marking = '',
     this.presence = 'present',
     this.similarity,
+    this.ssim,
   });
 
   bool get isMissing => presence == 'missing';
@@ -33,6 +35,7 @@ class Detection {
       similarity: json['similarity'] == null
           ? null
           : (json['similarity'] as num).toDouble(),
+      ssim: json['ssim'] == null ? null : (json['ssim'] as num).toDouble(),
     );
   }
 }
